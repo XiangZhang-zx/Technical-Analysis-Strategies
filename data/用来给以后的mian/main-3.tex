@@ -1,0 +1,787 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{authblk}
+\usepackage{comment}
+\usepackage{multirow}
+\usepackage{graphicx} % Required for inserting images
+\usepackage[table]{xcolor}
+\usepackage{colortbl}
+
+
+\title{A Simple Nearest-Day Daily Trading Strategy on Growth vs. Value based on Analogy to Nearest Neighbor Classification in Machine Learning}
+\author{Xiang Zhang and Eugene Pinsky\footnote{Correposning author: Eugene Pinsky, epinsky@bu.edu}}
+\affil{\small Department of Computer Science, Met College, 
+           Boston University, Boston, MA\\    
+          email: xz0224@bu.edu, epinsky@bu.edu}
+
+% \affil[1]{Department of Computer Science, Met College, Boston University}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+
+\begin{abstract}
+We are given a choice to invest either in the growth or the value index for the next day. We suggest and compare some simple algorithms based on the winning or losing index over the last $k$ days. 
+We find that for fixed $k$, choosing the losing index
+is better than choosing the winning index in terms of growth, maximum drawdown, and annualized volatility. We find that $k=3$ gives us the best performance suggesting that the market has limited memory. 
+\end{abstract}
+
+\medskip
+\noindent
+{\bf Keywords: } {Systematic trading, nearest-neighbor classification, 
+trading signals, maximum drawdown,
+probability distributions}
+%%\pacs[JEL Classification]{D8, H51}
+
+
+\section{Introduction}
+In the past decades, the prediction of movements in stock markets has been one of the most challenging problems for academicians and practitioners. That is, the inherent volatility and multifactorial nature of the financial markets, with many variables interacting in unpredictable ways, make this endeavor one of the most daunting tasks human intelligence is ever likely to engage in. They offer a framework for the analysis of market dynamics, but the subtleties of markets escape the models generally---a fact creating the search for more sophisticated computation techniques \cite{lara2021,saivijayalakshmi2021}. These include LSTM models, a class of artificial neural networks meant to deal with sequence problems, as an effective tool in financial forecasting \cite{shukla2023,chen2023}. Specifically, the uniqueness of LSTM is in its ability to model long-term dependencies, which is critical in the analysis of financial time series data \cite{ahmed2022,huang2019}. This enables them to retain information for a very long time and thus helps discover patterns and tendencies---an advantage in predicting stock market movements \cite{nguyen2022,mehra2023}. The paper attempts to assess how well LSTM models predict the movements in the S\&P 500, a barometer for the US stock market. Importantly, this paper sets out to demonstrate the efficacy of LSTMs in devising investment strategies that could surpass the benchmark S\&P 500 index. This involves the processing and analysis of financial data, harnessing the power of LSTM to extract market signals at the subsurface level. Therefore, the work will contribute to an open debate about how to improve predictions and hence generate wealth through better investment strategies for the analyses of financial markets \cite{joshi2022,yusuf2022}. The objective is to expand the work of LSTM-based models and applications by financial communities, mainly in stock price prediction, volatility, and market sentiment analysis \cite{vishwakarma2022,diqi2022,hu2021}, providing the tools needed for them to navigate the complexities within the stock market with better conviction.
+
+\section{Literature Review}
+\subsection{Traditional Stock Prediction Methods: A Brief Review}
+The accurate prediction of stock markets has been a focused area in financial research, where the blend of fundamental and technical analysis along with statistical models like ARIMA and GARCH has emerged as a central theme. Fundamental analysis is inclined toward the inner values of a firm based on financial and economic indicators, while technical analysis relies on past price and volume history to identify trends in the market. Statistical models like ARIMA (Auto-Regressive Integrated Moving Average) and GARCH (Generalized Auto-Regressive Conditional Heteroscedasticity) take a more quantitative approach towards forecasting market movement. However, these traditional methods are often challenged by their inability to capture the complex non-linear relationships inherent in financial time-series data. Research has shown improved forecasting accuracy when these models are combined, revealing the limitations and strengths of each approach in capturing market dynamics \cite{saivijayalakshmi2021,johari2018}.
+
+
+\section{Description of the Trading Strategies}
+
+Our trading strategies predict the choice of investments for the next day (growth or value) based on the relative performance of the corresponding indices over the last $W$ days. We will refer to $W$ as the window. 
+
+We start with a formal description of our algorithm. Let $d_{i}$ denote the $i$-th. Let $R_{i}^{g}$ and $R_{i}^{v}$ denote the daily returns of S{\&}P growth and S{\&}P value for $d_{i}$ respectively. To each day $d_{i}$ we assign a True label $L_{i}="+"$  or $L_{i}="-"$ as follows:
+\begin{enumerate}
+    \item $d_{i}$ is assigned $L_{i}="+"$ if $R_{i}^{g}\geq R_{i}^{v}$
+    \item $d_{i}$ is assigned $L_{i}="-"$ if $R_{i}^{g}< R_{i}^{v}$
+\end{enumerate}
+
+\noindent
+{\bf Example: } Suppose that for 10 consecutive 5 days 
+$d_{1}, d_{2},\ldots, d_{10}$ the daily returns for growth and value indices known. We can then assign daily True labels as shown in Table~\ref{tab_label_assignment}
+
+\begin{table}[!ht]
+    \centering
+    \caption{Label assignment}
+    \vspace{0.1in}
+    \begin{tabular}{l c c c c c  c c c c c}
+    \hline
+        Day $d_{1}$ & $d_{1}$ & $d_{2}$ & $d_{3}$ & $d_{4}$ & $d_{5}$ & $d_{6}$ & $d_{7}$ & $d_{8}$ & $d_{9}$ & $d_{10}$ \\
+       Daily Returns $R_{i}^{g}$ (growth) & 3 & 2 & -4 & -3 & 1  & 3 & 0 & -2 & -3 & 6\\
+       Daily Returns $R_{i}^{v}$ (value) & 1 & 1 & -2 & -1  & 1  & 2 & 1 & -3 & -1 & 4\\
+        Label $L_{i}$: & $+$ & $+$ & $-$ & $-$ & $+$ & $+$ & $-$ & $+$ & $-$ & $+$\\
+        \hline
+\end{tabular}
+\label{tab_label_assignment}
+\end{table}
+
+Once the labels are assigned to each trading day, we generate predicted labels (trading signal) $S_{i+1}$ for the day $d_{i+1}$ based on the assigned True labels in the previous day(s). We will use $S_{i}$ to denote predicted labels and $L_{i}$ to note True labels.
+
+Our trading algorithm invests in day $d_{i+1}$ based on predicted label $S_{i+1}$ for that day as follows:
+
+We will consider two trading signals:\begin{enumerate}
+    \item predicted label $S_{i+1}=\, "+"$: (re)invest in S{\&}P Growth  for day $d_{i+1}$
+    \item predicted label $S_{i+1}=\, "-"$: (re)invest in S{\&}P Value index for $d_{i+1}$
+\end{enumerate}
+
+The choice of signals will depend on the trading strategy
+We will consider the following trading strategies:
+\begin{enumerate}
+\item B{\&}H growth strategy: buy-and-hold Growth index strategy. This is equivalent to having a $G$ trading signal every day
+\item B{\&}H value strategy:  buy-and-hold Value index strategy. This is equivalent to having a $V$ trading signal every day
+
+\item 1-WS strategy: 1-day Winners strategy - invest in the winning index from the previous day:
+\begin{equation*}
+\begin{split}
+    L_{i}="+" & \Longrightarrow \quad S_{i+1}="+"\\
+    L_{i}="-" & \Longrightarrow \quad S_{i+1}="-"
+    \end{split}
+\end{equation*}
+
+\item 1-LS strategy: 1-day Losers strategy - invest in the losing index from the previous day:
+\begin{equation*}
+\begin{split}
+    L_{i}="+" & \Longrightarrow \quad S_{i+1}="-"\\
+    L_{i}="-" & \Longrightarrow \quad S_{i+1}="+"
+    \end{split}
+\end{equation*}
+
+
+The last two strategies can be generalized by examining the last $k$ days based on the "majority" label in these days. For this, we require $k$ to be an odd number and consider the following generalizations:
+
+\item $k$-WS strategy: $k$-day Winners strategy - invest based on the majority label from the previous $k$ days:
+\begin{equation*}
+\begin{split}
+    \hbox{Majority}(L_{i-k+1},\ldots,L_{i})="+" & \Longrightarrow \quad S_{i+1}="+"\\
+    \hbox{Majority}(L_{i-k+1},\ldots,L_{i})="-" & \Longrightarrow \quad S_{i+1}="-"
+    \end{split}
+\end{equation*}
+
+\item $k$-LS strategy: $k$-day Losers strategy - invest  based on the minority label from the previous $k$ days:
+\begin{equation*}
+\begin{split}
+    \hbox{Majority}(L_{i-k+1},\ldots,L_{i})="+" & \Longrightarrow \quad S_{i+1}="-"\\
+    \hbox{Majority}(L_{i-k+1},\ldots,L_{i})="-" & \Longrightarrow \quad S_{i+1}="+"
+    \end{split}
+\end{equation*}
+
+\end{enumerate}
+
+\noindent
+{\bf Example 2: } We illustrate these strategies using the same labels as in the previous example: 
+
+$$L =  +,\, +,\, -,\, -,\, +,\, +, \, + , \, - , \, +, \, -, \, +$$
+
+Consider 1-Day Winning Strategy. Except for the first day, we have the following predicted labels for trading:
+\begin{table}[!ht]
+    \centering
+    \begin{tabular}{l c c c c c  c c c c c}
+        Day & $d_{1}$ & $d_{2}$ & $d_{3}$ & $d_{4}$ & $d_{5}$ & $d_{6}$ & $d_{7}$ & $d_{8}$ & $d_{9}$ & $d_{10}$ \\[5pt]
+        True Labels & $+$ & + & $-$ & $-$ & $+$ & $+$ & $-$ & $+$ & $-$ & $+$ \\[5pt]
+              & $\searrow$ &  $\searrow$ & $\searrow$ & $\searrow$
+                  & $\searrow$ & $\searrow$ & $\searrow$ & $\searrow$ & $\searrow$ 
+                  & \\[10pt]
+        Predicted Labels &   &  $+$ & $+$ & $-$ & $-$ & $+$ & $+$ & $-$ & $+$ & $-$ \\
+\end{tabular}
+\end{table}
+For every day $d_{i}$ the signal for next day $S_{i+1}=G$ if the label for that day $L_{i}="+"$. Otherwise, the trading signal for the next day is $S_{i+1}=V$. Similarly, we can determine signals for other strategies.
+
+As another example, consider the 3-Day Losers strategy. We can assign a signal starting on the day $d_{4}$. The first three days have labels "+", "+" and "-" respectively. This means that on most days, the growth index had higher returns than value. The majority of these labels are "+" and therefore, the 3-Day Losers strategy assigns trading signal $S_{4}=V$ for the fourth day $d_{4}$.
+
+The trading signals are summarized in the Table~\ref{tab_signals} below.
+\begin{table}[!ht]
+    \centering
+    \caption{Predicted Labels for Different Trading Strategies}
+    \vspace{0.1in}
+    \begin{tabular}{l | c c c c c  c c c c c}
+    \hline
+        Day & $d_{1}$ & $d_{2}$ & $d_{3}$ & $d_{4}$ & $d_{5}$ & $d_{6}$ & $d_{7}$ & $d_{8}$ & $d_{9}$ & $d_{10}$ \\ \hline
+       True Label $L_{i}$: & $+$ & $+$ & $-$ & $-$ & $+$ & $+$ & $-$ & $+$ & $-$ & $+$\\
+
+        Buy-And-Hold G & $+$ & $+$ & $+$ & $+$ & $+$
+         & $+$ & $+$ & $+$ & $+$ & $+$\\
+        Buy-And-Hold V & $-$ & $-$ & $-$ & $-$ & $-$ & $-$ & $-$ & $-$ & $-$ & $-$\\
+        Predicted 1-WS     & n/a & $+$ & $+$ & $-$ & $-$ & $+$ & $+$ & $-$ & $+$ & $-$\\
+        Predicted 1-LS     & n/a & $-$ & $-$ & $+$ & $+$ & $-$ & $-$ & $+$ & $-$ & $+$\\
+        Predicted 3-WS & n/a & n/a & n/a & $+$ & $-$ & $-$ & $+$ & $+$ & $+$ & $-$\\
+        Predicted 3-LS & n/a & n/a & n/a & $-$ & $+$ & $+$ & $-$ & $-$ & $-$ & $+$\\
+        \hline
+\end{tabular}
+\label{tab_signals}
+\end{table}
+
+The $k$-day Winners strategy is similar to $k$NN nearest neighbor classification widely used in machine learning. In this classification, one uses the majority labels of the nearest (by some distance metric) $k$ neighbors for which labels are known. In our setting, we can think of distance as the time difference in days. 
+Then the $k$ neighbors are the preceding $k$ days and the majority of these labels determine the trading signal for the next day.
+
+In the next sections, we present a detailed comparison of these strategies in terms of growth, maximum drawdowns, annualized volatility, and transaction costs.
+
+
+\section{Results}
+
+
+
+The results are presented in Table~\ref{tab_comparison}.
+S\&P refers to the Standard \& Poor's 500 Index. Growth and Value represent Buy-Hold for SPYG and SPYV indices respectively.
+Max and Min strategies are based on selecting the higher growth or value from the previous day. Finally, 5-year, 3-year, and 1-year indicate the training periods of five, three, and one year, respectively.
+
+In Table~\ref{tab_comparison_example}, each strategy's performance is symbolized as follows: 'G' for Growth, indicating an investment in SPYG, and 'V' for Value, indicating an investment in SPYV. The 'Label' column classifies daily market outcomes based on the comparative performance of SPYV versus SPYG; a '+' label indicates a day where SPYV outperformed SPYG, and a '-' label signifies the reverse.The 'Winner' and 'Loser' columns are derived from the prior day's data (hence 'N/A' for the initial date), 
+
+
+
+\begin{comment}
+\begin{table}[!ht]
+    \centering
+    \caption{Strategy Performance Example Against SPYV and SPYG Daily Returns}
+    \begin{tabular}{llllllllll}
+    \hline
+        Date & 12/30/05 & 1/1/00 & 1/2/00 & 1/5/06 & 1/6/06 & 1/9/06 & 1/10/06 & 1/11/06 & 1/12/06 \\ \hline
+        SPYV & -0.5\% & 1.6\% & 0.4\% & 0.1\% & 0.9\% & 0.3\% & -0.2\% & 0.5\% & -0.6\% \\ 
+        SPYG & -0.5\% & 1.4\% & 0.7\% & -0.1\% & 1.0\% & 0.6\% & 0.0\% & 0.3\% & -0.4\% \\ 
+        Label & + & + & - & + & - & - & - & + & - \\ 
+        Growth & G & G & G & G & G & G & G & G & G \\ 
+        Value & V & V & V & V & V & V & V & V & V \\ 
+        Winer & N/A & V & V & G & V & G & G & G & V \\ 
+        Loser & N/A & G & G & V & G & V & V & V & G \\ \hline
+    \end{tabular}
+    \label{tab_comparison_example}
+\end{table}
+In Table~\ref{tab_pp}, the ‘SPYG>SPYV’ column represents the percentage probability that SPYG's daily returns exceed SPYV's during the observation period.
+\end{comment}
+
+\begin{table}[!ht]
+    \centering
+    \caption{Best Ten Days For S\&P}
+    \begin{tabular}{|l|l|l|l|l|l|l|l|l|l|}
+    \hline
+        Date & SPY & SPYV & SPYG & 1-WS & 1-LS & 3-WS & 3-LS & SC 1-WS & SC 1-LS \\ \hline
+        10/13/08 & 14.5 & 10.2 & 11.9 & Value & Growth & Growth & Value & Cash & SPY \\ \hline
+        10/28/08 & 11.7 & 10.5 & 7.2 & Growth & Value & Growth & Value & Cash & SPY \\ \hline
+        3/24/20 & 9.1 & 9.7 & 8.9 & Growth & Value & Growth & Value & Cash & SPY \\ \hline
+        3/13/20 & 8.5 & 8.9 & 9.3 & Growth & Value & Growth & Value & Cash & SPY \\ \hline
+        3/23/09 & 7.2 & 7.2 & 6.6 & Growth & Value & Growth & Value & Cash & SPY \\ \hline
+        11/24/08 & 6.9 & 7.6 & 7.4 & Value & Growth & Growth & Value & SPY & Cash \\ \hline
+        4/6/20 & 6.7 & 6.4 & 7.3 & Growth & Value & Value & Growth & Cash & SPY \\ \hline
+        11/13/08 & 6.2 & 6.4 & 6.7 & Growth & Value & Value & Growth & Cash & SPY \\ \hline
+        10/20/08 & 6.0 & 4.3 & 3.7 & Growth & Value & Growth & Value & Cash & SPY \\ \hline
+        7/24/02 & 6.0 & 6.7 & 5.3 & Value & Growth & Value & Growth & Cash & SPY \\ \hline
+    \end{tabular}
+\end{table}
+\begin{table}[!ht]
+    \centering
+    \caption{Worst Ten Days For S\&P}
+    \begin{tabular}{|l|l|l|l|l|l|l|l|l|l|}
+    \hline
+        Date & SPY & SPYV & SPYG & 1-WS & 1-LS & 3-WS & 3-LS & SC 1-WS & SC 1-LS \\ \hline
+        11/19/08 & -6.4 & -5.4 & -5.0 & Value & Growth & Value & Growth & SPY & Cash \\ \hline
+        8/8/11 & -6.5 & -6.6 & -5.8 & Value & Growth & Growth & Value & Cash & SPY \\ \hline
+        10/9/08 & -7.0 & -9.7 & -5.2 & Growth & Value & Growth & Value & Cash & SPY \\ \hline
+        11/20/08 & -7.4 & -7.6 & -6.8 & Growth & Value & Value & Growth & Cash & SPY \\ \hline
+        3/9/20 & -7.8 & -8.3 & -7.4 & Growth & Value & Growth & Value & Cash & SPY \\ \hline
+        9/29/08 & -7.8 & -6.2 & -7.0 & Growth & Value & Growth & Value & SPY & Cash \\ \hline
+        12/1/08 & -8.9 & -9.3 & -7.4 & Value & Growth & Value & Growth & SPY & Cash \\ \hline
+        3/12/20 & -9.6 & -10.1 & -9.0 & Growth & Value & Growth & Value & Cash & SPY \\ \hline
+        10/15/08 & -9.8 & -8.9 & -10.2 & Value & Growth & Value & Growth & Cash & SPY \\ \hline
+        3/16/20 & -10.9 & -11.2 & -12.0 & Growth & Value & Growth & Value & SPY & Cash \\ \hline
+    \end{tabular}
+\end{table}
+
+\begin{table}[!ht]
+    \centering
+    \caption{TPR And TNR For Winer And Loser Strategies}
+    \begin{tabular}{l | rr| rr | rr| rr}
+    \hline
+\multirow{2}{*}{Year} & \multicolumn{2}{c|}{1-WS }   
+& \multicolumn{2}{c|}{1-LS}  & \multicolumn{2}{c}{1S-1WS} & \multicolumn{2}{c}{1S-1LS}  \\
+ & TPR & TNR &  TPR & TNR &  TPR & TNR &  TPR & TNR \\
+\hline
+2001 & \cellcolor{red!25}44.6 & 47.2 & \cellcolor{green!25}59.5 & 49.6 & 48.0 & 48.8 & 51.2 & 52.0 \\
+2002 & \cellcolor{red!25}31.4 & 40.3 & \cellcolor{green!25}69.5 & 59.7 & 45.5 & 39.2 & 60.8 & 54.5 \\
+2003 & 42.5 & 41.6 & 57.5 & 58.4 & \cellcolor{red!25}40.9 & 54.2 & 45.8 & \cellcolor{green!25}59.1 \\
+2004 & \cellcolor{red!25}41.7 & 46.2 & \cellcolor{green!25}58.3 & 53.8 & 42.7 & 56.3 & 43.7 & 57.3 \\
+2005 & 45.5 & 49.6 & 54.5 & 50.4 & \cellcolor{red!25}41.7 & 51.1 & 48.9 & \cellcolor{green!25}58.3 \\
+2006 & \cellcolor{red!25}38.5 & 53.5 & \cellcolor{green!25}61.5 & 46.5 & 47.3 & 58.9 & 41.1 & 52.7 \\
+2007 & 48.6 & 37.2 & 51.4 & 62.8 & \cellcolor{red!25}36.3 & 47.8 & 52.2 & \cellcolor{green!25}63.7 \\
+2008 & \cellcolor{red!25}47.2 & 47.7 & \cellcolor{green!25}52.8 & 52.3 & 51.2 & 50.0 & 50.0 & 48.8 \\
+2009 & 53.8 & \cellcolor{red!25}37.4 & 46.2 & \cellcolor{green!25}62.6 & 43.2 & 56.0 & 44.0 & 56.8 \\
+2010 & 45.6 & 46.5 & 54.4 & 53.5 & \cellcolor{red!25}41.5 & 56.8 & 43.2 & \cellcolor{green!25}58.5 \\
+2011 & 44.9 & 44.8 & 55.1 & 55.2 & 48.3 & \cellcolor{green!25}56.6 & \cellcolor{red!25}43.4 & 51.7 \\
+2012 & \cellcolor{red!25}35.3 & 44.0 & \cellcolor{green!25}64.7 & 56.0 & 50.4 & 58.4 & 41.6 & 49.6 \\
+2013 & 47.4 & 41.2 & 52.6 & 58.8 & \cellcolor{red!25}38.7 & 55.5 & 44.5 & \cellcolor{green!25}61.3 \\
+2014 & 52.9 & 41.1 & 47.1 & 58.9 & \cellcolor{red!25}35.9 & 56.4 & 43.6 & \cellcolor{green!25}64.1 \\
+2015 & 51.8 & \cellcolor{red!25}41.7 & 48.2 & \cellcolor{green!25}58.3 & 49.6 & 45.5 & 54.5 & 50.4 \\
+2016 & 51.2 & 48.8 & 48.8 & 51.2 & \cellcolor{red!25}36.5 & 46.7 & 53.3 & \cellcolor{green!25}63.5 \\
+2017 & 54.5 & \cellcolor{red!25}37.7 & 45.5 & \cellcolor{green!25}62.3 & 38.0 & 53.1 & 46.9 & 62.0 \\
+2018 & \cellcolor{green!25}58.3 & 44.9 & \cellcolor{red!25}41.7 & 55.1 & 50.0 & 54.9 & 45.1 & 50.0 \\
+2019 & 52.8 & 54.3 & 47.2 & 45.7 & 44.1 & \cellcolor{green!25}62.0 & \cellcolor{red!25}38.0 & 55.9 \\
+2020 & 62.0 & 44.7 & 38.0 & 55.3 & \cellcolor{red!25}32.7 & 50.7 & 49.3 & \cellcolor{green!25}67.3 \\
+2021 & 52.8 & 53.5 & 47.2 & 46.5 & \cellcolor{red!25}39.6 & 56.8 & 43.2 & \cellcolor{green!25}60.4 \\
+2022 & 43.4 & 54.3 & 56.6 & 45.7 & 56.3 & \cellcolor{red!25}43.1 & \cellcolor{green!25}56.9 & 43.7 \\
+2023 & 56.3 & \cellcolor{red!25}41.7 & 43.7 & \cellcolor{green!25}57.4 & 42.7 & 55.0 & 45.0 & 57.3 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[!ht]
+    \centering
+    \caption{EW, SPY-CASH, GRROWTH-VALUE Annual Return}
+\begin{tabular}{lrrrrr}
+\hline
+Year & EW & SC 1-WD  & SC 1-LD & 1-WD & 1-LD \\
+\hline
+2006 & 15.2 & 11.1 & \cellcolor{red!25}4.3 & 11.4 & \cellcolor{green!25}19.0 \\
+2007 & 6.0 & \cellcolor{red!25}-11.9 & \cellcolor{green!25}19.3 & -0.2 & 12.5 \\
+2008 & -36.6 & -42.8 & \cellcolor{green!25}10.6 & \cellcolor{red!25}-45.7 & -26.5 \\
+2009 & 26.8 & \cellcolor{red!25}5.0 & 20.3 & 19.3 & \cellcolor{green!25}34.4 \\
+2010 & 15.9 & \cellcolor{red!25}1.4 & 13.5 & 9.4 & \cellcolor{green!25}22.7 \\
+2011 & 2.0 & 5.5 & -3.4 & \cellcolor{red!25}-4.9 & \cellcolor{green!25}9.2 \\
+2012 & 15.8 & 15.2 & 0.7 & \cellcolor{red!25}-1.8 & \cellcolor{green!25}36.3 \\
+2013 & 32.2 & \cellcolor{red!25}14.1 & 16.0 & 24.6 & \cellcolor{green!25}40.3 \\
+2014 & 13.5 & \cellcolor{red!25}2.3 & 11.0 & 10.2 & \cellcolor{green!25}16.9 \\
+2015 & 0.9 & 1.0 & 0.3 & \cellcolor{red!25}-2.7 & \cellcolor{green!25}4.6 \\
+2016 & 11.9 & \cellcolor{red!25}-5.0 & \cellcolor{green!25}17.9 & 12.6 & 11.1 \\
+2017 & \cellcolor{green!25}21.2 & \cellcolor{red!25}7.4 & 13.4 & 21.1 & 21.2 \\
+2018 & -4.6 & \cellcolor{green!25}9.2 & \cellcolor{red!25}-12.6 & -2.5 & -6.7 \\
+2019 & 31.3 & 20.1 & \cellcolor{red!25}9.2 & \cellcolor{green!25}37.1 & 25.7 \\
+2020 & 16.7 & \cellcolor{red!25}-13.1 & \cellcolor{green!25}36.1 & 27.7 & 6.0 \\
+2021 & 28.8 & \cellcolor{red!25}12.8 & 14.1 & \cellcolor{green!25}41.7 & 16.3 \\
+2022 & -17.9 & -12.4 & \cellcolor{green!25}-6.6 & \cellcolor{red!25}-23.1 & -13.1 \\
+2023 & 26.1 & \cellcolor{red!25}8.3 & 16.5 & \cellcolor{green!25}30.0 & 22.2 \\
+\hline
+MAX & 32.2 & \cellcolor{red!25}20.1 & 36.1 & \cellcolor{green!25}41.7 & 40.3 \\
+MIN & -36.6 & -42.8 & \cellcolor{green!25}-12.6 & \cellcolor{red!25}-45.7 & -26.5 \\
+MED & 15.5 & \cellcolor{red!25}5.3 & 12.2 & 10.8 & \cellcolor{green!25}16.6 \\
+MEAN & 11.4 & \cellcolor{red!25}1.6 & 10.0 & 9.1 & \cellcolor{green!25}14.0 \\
+STD & 17.3 & 14.3 & \cellcolor{red!25}11.2 & \cellcolor{green!25}20.9 & 16.6 \\
+\hline
+\end{tabular}
+\end{table}
+\begin{table}[!ht]
+    \centering
+    \caption{EW, SPY-CASH, GRROWTH-VALUE Max Drawdown}
+\begin{tabular}{lrrrrr}
+\hline
+Year & EW & SC 1-WD  & SC 1-LD & 1-WD & 1-LD \\
+\hline
+2006 & -7.7 & \cellcolor{green!25}-4.2 & -6.8 & \cellcolor{red!25}-8.0 & -7.7 \\
+2007 & -9.7 & \cellcolor{red!25}-19.7 & \cellcolor{green!25}-5.7 & -11.1 & -10.1 \\
+2008 & -46.9 & -44.3 & \cellcolor{green!25}-20.9 & \cellcolor{red!25}-53.6 & -41.8 \\
+2009 & -26.6 & -20.1 & \cellcolor{green!25}-14.7 & -25.4 & \cellcolor{red!25}-28.4 \\
+2010 & -15.4 & -13.2 & \cellcolor{green!25}-8.0 & \cellcolor{red!25}-16.5 & -14.3 \\
+2011 & -18.6 & \cellcolor{green!25}-13.6 & -16.1 & \cellcolor{red!25}-22.7 & -16.8 \\
+2012 & -9.7 & \cellcolor{green!25}-4.3 & -9.2 & \cellcolor{red!25}-14.7 & -6.3 \\
+2013 & -5.5 & -4.9 & -4.7 & \cellcolor{red!25}-7.1 & \cellcolor{green!25}-4.3 \\
+2014 & -7.4 & -7.8 & \cellcolor{green!25}-4.2 & \cellcolor{red!25}-8.2 & -7.4 \\
+2015 & -12.0 & \cellcolor{green!25}-6.1 & -11.7 & -12.5 & \cellcolor{red!25}-13.2 \\
+2016 & -9.0 & -8.3 & \cellcolor{green!25}-3.8 & -7.3 & \cellcolor{red!25}-10.8 \\
+2017 & -2.5 & -2.8 & \cellcolor{green!25}-1.8 & \cellcolor{red!25}-3.7 & -3.3 \\
+2018 & -19.2 & \cellcolor{green!25}-6.7 & \cellcolor{red!25}-19.9 & -19.5 & -19.5 \\
+2019 & -6.7 & \cellcolor{green!25}-5.3 & -6.6 & \cellcolor{red!25}-7.3 & \cellcolor{red!25}-7.3 \\
+2020 & -34.0 & -28.3 & \cellcolor{green!25}-17.6 & -32.3 & \cellcolor{red!25}-36.0 \\
+2021 & -4.9 & -5.2 & \cellcolor{green!25}-4.3 & -5.7 & \cellcolor{red!25}-7.9 \\
+2022 & -24.3 & \cellcolor{green!25}-13.2 & -17.0 & \cellcolor{red!25}-31.2 & -19.5 \\
+2023 & -10.0 & -7.9 & \cellcolor{green!25}-7.0 & \cellcolor{red!25}-10.6 & -9.8 \\ \hline
+MAX & -2.5 & -2.8 & \cellcolor{green!25}-1.8 & \cellcolor{red!25}-3.7 & -3.3 \\
+MIN & -46.9 & -44.3 & \cellcolor{green!25}-20.9 & \cellcolor{red!25}-53.6 & -41.8 \\
+MED & -9.9 & -7.8 & \cellcolor{green!25}-7.5 & \cellcolor{red!25}-11.8 & -10.4 \\
+MEAN & -15.0 & -12.0 & \cellcolor{green!25}-10.0 & \cellcolor{red!25}-16.5 & -14.7 \\
+STD & 11.3 & 10.3 & \cellcolor{red!25}6.0 & \cellcolor{green!25}12.3 & 10.5 \\
+
+\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[!ht]
+    \centering
+    \caption{Prior Probability}
+    \begin{tabular}{lccc|c} 
+    \hline
+         & SPYV & SPYG & SPY & SPYG\textgreater SPYV \ \\ \hline
+        Prior Probability & 54.0\% & 55.4\% & 54.9\% & 52.24\% \\ \hline
+    \end{tabular}
+    \label{tab_pp}
+\end{table}
+
+
+
+
+
+\begin{table}[!ht]
+    \centering
+    \caption{Comparison of Annual End Value of Investment Strategies.}
+    \medskip
+    \begin{tabular}{l | rrrr | rr | rr| rr}
+    \hline
+\multirow{2}{*}{Year} & \multicolumn{4}{c|}{Buy-and-Hold}   
+& \multicolumn{2}{c|}{$k=1$  day}  & \multicolumn{2}{c}{$k=3$ days} & \multicolumn{2}{c}{SP vs Cash}  \\
+  & S\&P & Growth & Value &EW & 1-WS & 1-LS & 3-WS & 3-LS & 1S-WS & 1S-LS \\ \hline
+        2001 & 88 & 74 & 94 & 85 & 60 & 117 & 80 & 88 & 93 & 95 \\ 
+        2002 & 69 & 50 & 77 & 64 & 25 & 157 & 36 & 108 & 67 & 103 \\ 
+        2003 & 89 & 65 & 97 & 81 & 26 & 238 & 43 & 146 & 73 & 122 \\ 
+        2004 & 98 & 68 & 110 & 89 & 27 & 281 & 45 & 166 & 77 & 127 \\ 
+        2005 & 103 & 70 & 116 & 92 & 26 & 308 & 47 & 173 & 73 & 141 \\ 
+        2006 & 119 & 76 & 141 & 106 & 29 & 367 & 50 & 213 & 81 & 147 \\ 
+        2007 & 125 & 84 & 143 & 113 & 29 & 413 & 51 & 238 & 71 & 176 \\ 
+        2008 & 79 & 53 & 91 & 71 & 16 & 303 & 26 & 185 & 41 & 194 \\ 
+        2009 & 100 & 72 & 106 & 91 & 19 & 408 & 32 & 242 & 43 & 234 \\ 
+        2010 & 115 & 84 & 123 & 105 & 21 & 501 & 34 & 299 & 43 & 265 \\ 
+        2011 & 117 & 88 & 122 & 107 & 20 & 547 & 33 & 327 & 46 & 256 \\ 
+        2012 & 136 & 100 & 143 & 124 & 19 & 745 & 34 & 418 & 53 & 258 \\ 
+        2013 & 180 & 133 & 188 & 164 & 24 & 1,045 & 43 & 578 & 60 & 299 \\ 
+        2014 & 204 & 153 & 211 & 186 & 26 & 1,222 & 47 & 686 & 62 & 332 \\ 
+        2015 & 207 & 161 & 205 & 188 & 26 & 1,278 & 47 & 700 & 62 & 333 \\ 
+        2016 & 232 & 172 & 240 & 210 & 29 & 1,419 & 52 & 790 & 59 & 392 \\ 
+        2017 & 282 & 218 & 276 & 255 & 35 & 1,720 & 63 & 955 & 63 & 445 \\ 
+        2018 & 269 & 218 & 252 & 243 & 34 & 1,604 & 63 & 864 & 69 & 388 \\ 
+        2019 & 353 & 285 & 331 & 319 & 47 & 2,016 & 86 & 1,097 & 83 & 424 \\ 
+        2020 & 418 & 381 & 336 & 373 & 60 & 2,137 & 89 & 1,430 & 72 & 577 \\ 
+        2021 & 538 & 503 & 419 & 480 & 85 & 2,486 & 121 & 1,743 & 82 & 659 \\ 
+        2022 & 440 & 355 & 397 & 394 & 65 & 2,161 & 89 & 1,592 & 72 & 615 \\ 
+        2023 & 555 & 461 & 486 & 496 & 85 & 2,642 & 119 & 1,878 & 78 & 717 \\ 
+\hline
+    \end{tabular}
+    \label{tab_comparison}
+  
+\end{table}
+
+\begin{table}[!ht]
+    \centering
+    \caption{Comparison of Annual Return of Investment Strategies.}
+    \medskip
+    \begin{tabular}{l | rrrr | rr | rr| rr}
+    \hline
+\multirow{2}{*}{Year} & \multicolumn{4}{c|}{Buy-and-Hold}   
+& \multicolumn{2}{c|}{$k=1$  day}  & \multicolumn{2}{c}{$k=3$ days} & \multicolumn{2}{c}{SP vs Cash}  \\
+  & S\&P & Growth & Value &EW & 1-WS & 1-LS & 3-WS & 3-LS & 1S-WS & 1S-LS \\ \hline
+2001 & -11.8 & -25.9 & -5.6 & -15.1 & \cellcolor{red!25}-40.2 & \cellcolor{green!25}17.0 & -20.2 & -12.4 & -7.1 & -5.0 \\
+2002 & -21.6 & -32.1 & -18.0 & -24.9 & \cellcolor{red!25}-58.5 & \cellcolor{green!25}34.2 & -54.7 & 22.8 & -28.0 & 8.9 \\
+2003 & 28.2 & 28.3 & 25.2 & 27.0 & \cellcolor{red!25}6.1 & \cellcolor{green!25}51.4 & 18.8 & 35.3 & 8.9 & 17.8 \\
+2004 & 10.7 & 5.3 & 13.2 & 9.2 & \cellcolor{red!25}0.7 & \cellcolor{green!25}18.4 & 4.2 & 14.4 & 5.9 & 4.5 \\
+2005 & 4.8 & 2.8 & 5.4 & 4.1 & -1.2 & 9.6 & 4.0 & 4.1 & \cellcolor{red!25}-5.4 & \cellcolor{green!25}10.8 \\
+2006 & 15.8 & 9.0 & 21.6 & 15.2 & 11.4 & 19.0 & 7.9 & \cellcolor{green!25}22.8 & 11.1 & \cellcolor{red!25}4.3 \\
+2007 & 5.1 & 10.8 & 1.4 & 6.0 & -0.2 & 12.5 & 0.5 & 11.7 & \cellcolor{red!25}-11.9 & \cellcolor{green!25}19.3 \\
+2008 & -36.8 & -37.4 & -36.3 & -36.6 & -45.7 & -26.5 & \cellcolor{red!25}-48.8 & -22.1 & -42.8 & \cellcolor{green!25}10.6 \\
+2009 & 26.4 & \cellcolor{green!25}37.0 & 17.1 & 26.8 & 19.3 & 34.4 & 22.6 & 30.9 & \cellcolor{red!25}5.0 & 20.3 \\
+2010 & 15.1 & 16.2 & 15.5 & 15.9 & 9.4 & 22.7 & 8.7 & \cellcolor{green!25}23.5 & \cellcolor{red!25}1.4 & 13.5 \\
+2011 & 1.9 & 4.6 & -0.7 & 2.0 & -4.9 & 9.2 & \cellcolor{red!25}-5.0 & \cellcolor{green!25}9.3 & 5.5 & -3.4 \\
+2012 & 16.0 & 14.2 & 17.2 & 15.8 & \cellcolor{red!25}-1.8 & \cellcolor{green!25}36.3 & 4.8 & 27.7 & 15.2 & 0.7 \\
+2013 & 32.3 & 32.6 & 31.8 & 32.2 & 24.6 & \cellcolor{green!25}40.3 & 26.3 & 38.3 & \cellcolor{red!25}14.1 & 16.0 \\
+2014 & 13.5 & 14.8 & 12.2 & 13.5 & 10.2 & 16.9 & 8.6 & \cellcolor{green!25}18.6 & \cellcolor{red!25}2.3 & 11.0 \\
+2015 & 1.2 & \cellcolor{green!25}5.1 & \cellcolor{red!25}-3.2 & 0.9 & -2.7 & 4.6 & -0.3 & 2.1 & 1.0 & 0.3 \\
+2016 & 12.0 & 6.8 & 17.1 & 11.9 & 12.6 & 11.1 & 10.8 & 12.9 & \cellcolor{red!25}-5.0 & \cellcolor{green!25}17.9 \\
+2017 & 21.7 & \cellcolor{green!25}27.2 & 15.4 & 21.2 & 21.1 & 21.2 & 21.5 & 20.8 & \cellcolor{red!25}7.4 & 13.4 \\
+2018 & -4.6 & -0.1 & -9.0 & -4.6 & -2.5 & -6.7 & 0.4 & -9.5 & \cellcolor{green!25}9.2 & \cellcolor{red!25}-12.6 \\
+2019 & 31.2 & 30.8 & 31.7 & 31.3 & \cellcolor{green!25}37.1 & 25.7 & 35.8 & 26.9 & 20.1 & \cellcolor{red!25}9.2 \\
+2020 & 18.3 & 33.5 & 1.4 & 16.7 & 27.7 & 6.0 & 3.8 & 30.4 & \cellcolor{red!25}-13.1 & \cellcolor{green!25}36.1 \\
+2021 & 28.7 & 32.0 & 24.9 & 28.8 & \cellcolor{green!25}41.7 & 16.3 & 35.3 & 21.9 & \cellcolor{red!25}12.8 & 14.1 \\
+2022 & -18.2 & \cellcolor{red!25}-29.4 & \cellcolor{green!25}-5.3 & -17.9 & -23.1 & -13.1 & -26.8 & -8.7 & -12.4 & -6.6 \\
+2023 & 26.2 & 30.0 & 22.2 & 26.1 & 30.0 & 22.2 & \cellcolor{green!25}34.7 & 18.0 & \cellcolor{red!25}8.3 & 16.5 \\\hline
+$\max$ & 32.3 & 37.0 & 31.8 & 32.2 & 41.7 & \cellcolor{green!25}51.4 & 35.8 & 38.3 & \cellcolor{red!25}20.1 & 36.1 \\
+$\min$ & -36.8 & -37.4 & -36.3 & -36.6 & \cellcolor{red!25}-58.5 & -26.5 & -54.7 & -22.1 & -42.8 & \cellcolor{green!25}-12.6 \\
+$M$ & 13.5 & 10.8 & 13.2 & 13.5 & 6.1 & 17.0 & \cellcolor{red!25}4.8 & \cellcolor{green!25}18.6 & 5.0 & 10.8 \\
+$\mu$  & 9.4 & 9.4 & 8.5 & 8.9 & 3.1 & \cellcolor{green!25}16.6 & 4.0 & 14.8 & \cellcolor{red!25}0.1 & 9.5 \\
+$\sigma$ & 18.3 & 22.3 & 16.6 & 18.6 & \cellcolor{green!25}25.4 & 17.4 & 23.6 & 16.0 & 14.6 & \cellcolor{red!25}10.8 \\
+IRR & 6.8 & 5.7 & 6.0 & 6.2 & -192.1 & \cellcolor{green!25}15.1 & -6.9 & 13.3 & \cellcolor{red!25}-193.7 & 8.2 \\
+
+\hline
+    \end{tabular}
+    \label{tab_comparison}
+  
+\end{table}
+
+In Table~\ref{tab_comparison_drawdown} we compare the drawdowns of the strategies.
+
+
+\begin{table}[!ht]
+    \centering
+    \caption{Annual Maximum Drawdowns of Investment Strategies}
+    \medskip
+    \begin{tabular}{l | rrrr | rr | rr| rr}
+    \hline
+\multirow{2}{*}{Year} & \multicolumn{4}{c|}{Buy-and-Hold}   
+& \multicolumn{2}{c|}{$k=1$  day}  & \multicolumn{2}{c}{$k=3$ days} & \multicolumn{2}{c}{SP vs Cash}  \\
+  & S\&P & Growth & Value &EW & 1-WS & 1-LS & 3-WS & 3-LS & 1S-WS & 1S-LS \\ \hline
+2001 & -28.8 & -48.6 & -18.1 & -33.7 & \cellcolor{red!25}-53.7 & -32.0 & -35.5 & -36.9 & \cellcolor{green!25}-15.7 & -19.7 \\
+2002 & -33.0 & -40.1 & -31.2 & -34.3 & \cellcolor{red!25}-58.9 & -26.4 & -55.3 & \cellcolor{green!25}-17.9 & -29.4 & -18.0 \\
+2003 & -13.7 & -12.8 & -15.3 & -13.7 & \cellcolor{red!25}-19.1 & -13.9 & -14.6 & -13.5 & -9.6 & \cellcolor{green!25}-6.5 \\
+2004 & -7.5 & -10.8 & -7.5 & -7.8 & \cellcolor{red!25}-13.7 & -6.5 & -10.5 & -7.9 & \cellcolor{green!25}-6.4 & -6.6 \\
+2005 & -7.0 & -8.0 & -6.2 & -6.6 & -8.0 & -5.6 & -8.4 & -6.4 & \cellcolor{red!25}-10.9 & \cellcolor{green!25}-4.9 \\
+2006 & -7.6 & \cellcolor{red!25}-9.0 & -7.4 & -7.7 & -8.0 & -7.7 & -8.9 & -6.9 & \cellcolor{green!25}-4.2 & -6.8 \\
+2007 & -9.9 & -9.0 & -12.0 & -9.7 & -11.1 & -10.1 & -12.6 & -8.9 & \cellcolor{red!25}-19.7 & \cellcolor{green!25}-5.7 \\
+2008 & -47.1 & -48.0 & -47.0 & -46.9 & -53.6 & -41.8 & \cellcolor{red!25}-56.8 & -39.6 & -44.3 & \cellcolor{green!25}-20.9 \\
+2009 & -27.1 & -23.0 & \cellcolor{red!25}-30.6 & -26.6 & -25.4 & -28.4 & -25.5 & -28.2 & -20.1 & \cellcolor{green!25}-14.7 \\
+2010 & -15.7 & -16.3 & -14.5 & -15.4 & -16.5 & -14.3 & \cellcolor{red!25}-16.9 & -13.9 & -13.2 & \cellcolor{green!25}-8.0 \\
+2011 & -18.6 & -16.5 & -21.9 & -18.6 & \cellcolor{red!25}-22.7 & -16.8 & -22.1 & -17.9 & \cellcolor{green!25}-13.6 & -16.1 \\
+2012 & -9.7 & -8.3 & -11.2 & -9.7 & \cellcolor{red!25}-14.7 & -6.3 & -12.8 & -7.0 & \cellcolor{green!25}-4.3 & -9.2 \\
+2013 & -5.6 & -5.8 & -5.1 & -5.5 & \cellcolor{red!25}-7.1 & \cellcolor{green!25}-4.3 & -6.9 & -4.9 & -4.9 & -4.7 \\
+2014 & -7.3 & -7.4 & -7.4 & -7.4 & \cellcolor{red!25}-8.2 & -7.4 & -8.2 & -6.9 & -7.8 & \cellcolor{green!25}-4.2 \\
+2015 & -11.9 & -11.8 & \cellcolor{red!25}-13.6 & -12.0 & -12.5 & -13.2 & -13.1 & -12.6 & \cellcolor{green!25}-6.1 & -11.7 \\
+2016 & -9.2 & -9.5 & -8.6 & -9.0 & -7.3 & \cellcolor{red!25}-10.8 & -9.5 & -8.5 & -8.3 & \cellcolor{green!25}-3.8 \\
+2017 & -2.6 & -2.4 & \cellcolor{red!25}-4.4 & -2.5 & -3.7 & -3.3 & -2.6 & -3.3 & -2.8 & \cellcolor{green!25}-1.8 \\
+2018 & -19.3 & -20.6 & -19.2 & -19.2 & -19.5 & -19.5 & -18.3 & \cellcolor{red!25}-21.1 & \cellcolor{green!25}-6.7 & -19.9 \\
+2019 & -6.6 & -6.4 & -7.7 & -6.7 & -7.3 & -7.3 & -6.1 & \cellcolor{red!25}-8.0 & \cellcolor{green!25}-5.3 & -6.6 \\
+2020 & -33.7 & -31.3 & \cellcolor{red!25}-36.9 & -34.0 & -32.3 & -36.0 & -33.9 & -34.4 & -28.3 & \cellcolor{green!25}-17.6 \\
+2021 & -5.1 & \cellcolor{red!25}-8.7 & -5.8 & -4.9 & -5.7 & -7.9 & -5.7 & -7.1 & -5.2 & \cellcolor{green!25}-4.3 \\
+2022 & -24.5 & -32.3 & -17.9 & -24.3 & -31.2 & -19.5 & \cellcolor{red!25}-32.4 & -20.3 & \cellcolor{green!25}-13.2 & -17.0 \\
+2023 & -10.0 & -9.1 & -10.9 & -10.0 & -10.6 & -9.8 & -7.7 & \cellcolor{red!25}-12.2 & -7.9 & \cellcolor{green!25}-7.0 \\ \hline
+$\max$ & -2.6 & -2.4 & \cellcolor{red!25}-4.4 & -2.5 & -3.7 & -3.3 & -2.6 & -3.3 & -2.8 & \cellcolor{green!25}-1.8 \\
+$\min$ & -47.1 & -48.6 & -47.0 & -46.9 & \cellcolor{red!25}-58.9 & -41.8 & -56.8 & -39.6 & -44.3 & \cellcolor{green!25}-20.9 \\
+$M$ & -10.0 & -10.8 & -12.0 & -10.0 & \cellcolor{red!25}-13.7 & -10.8 & -12.8 & -12.2 & -8.3 & \cellcolor{green!25}-7.0 \\
+$\mu$  & -15.7 & -17.2 & -15.7 & -15.9 & \cellcolor{red!25}-19.6 & -15.2 & -18.5 & -15.0 & -12.5 & \cellcolor{green!25}-10.2 \\
+$\sigma$ & 11.5 & 13.6 & 11.2 & 11.9 & \cellcolor{green!25}16.2 & 10.8 & 15.0 & 10.6 & 10.1 & \cellcolor{red!25}6.2 \\
+
+\hline
+    \end{tabular}
+    \label{tab_comparison_drawdown}
+\end{table}
+
+\begin{table}[!ht]
+    \centering
+    \caption{Annual Growth Comparison for Different $k$}
+    \medskip
+    \begin{tabular}{l | rr| rr| rr| rr| rr}
+    \hline
+\multirow{2}{*}{Year} & \multicolumn{2}{c|}{$k=1$ day}   
+& \multicolumn{2}{c|}{$k=3$ day}  & \multicolumn{2}{c|}{$k=5$ days}   
+& \multicolumn{2}{c|}{$k=7$ days}   & \multicolumn{2}{c}{$k=9$ days}\\
+ & 1-WS & 1-LS & 3-WS & 3-LS & 5-WS & 5-LS & 7-WS & 7-LS & 9-WS & 9-LS\\
+\hline
+                2001 & 60 & 117 & 80 & 88 & 76 & 92 & 83 & 84 & 74 & 95 \\ 
+        2002 & 25 & 157 & 36 & 108 & 39 & 99 & 40 & 99 & 43 & 91 \\ 
+        2003 & 26 & 238 & 43 & 146 & 46 & 137 & 47 & 132 & 52 & 120 \\ 
+        2004 & 27 & 281 & 45 & 166 & 49 & 151 & 51 & 147 & 55 & 135 \\ 
+        2005 & 26 & 308 & 47 & 173 & 51 & 158 & 54 & 149 & 57 & 142 \\ 
+        2006 & 29 & 367 & 50 & 213 & 59 & 181 & 62 & 174 & 65 & 163 \\ 
+        2007 & 29 & 413 & 51 & 238 & 60 & 200 & 61 & 198 & 65 & 186 \\ 
+        2008 & 16 & 303 & 26 & 185 & 30 & 158 & 33 & 146 & 34 & 143 \\ 
+        2009 & 19 & 408 & 32 & 242 & 37 & 210 & 40 & 193 & 43 & 180 \\ 
+        2010 & 21 & 501 & 34 & 299 & 40 & 257 & 47 & 222 & 49 & 212 \\ 
+        2011 & 20 & 547 & 33 & 327 & 39 & 276 & 47 & 230 & 47 & 226 \\ 
+        2012 & 19 & 745 & 34 & 418 & 41 & 351 & 51 & 280 & 53 & 273 \\ 
+        2013 & 24 & 1045 & 43 & 578 & 52 & 479 & 66 & 378 & 67 & 373 \\ 
+        2014 & 26 & 1222 & 47 & 686 & 60 & 539 & 74 & 434 & 76 & 424 \\ 
+        2015 & 26 & 1278 & 47 & 700 & 59 & 553 & 73 & 452 & 75 & 441 \\ 
+        2016 & 29 & 1419 & 52 & 790 & 66 & 620 & 84 & 487 & 86 & 480 \\ 
+        2017 & 35 & 1720 & 63 & 955 & 81 & 745 & 102 & 591 & 103 & 585 \\ 
+        2018 & 34 & 1604 & 63 & 864 & 79 & 697 & 100 & 549 & 92 & 596 \\ 
+        2019 & 47 & 2016 & 86 & 1097 & 107 & 882 & 128 & 739 & 121 & 779 \\ 
+        2020 & 60 & 2137 & 89 & 1430 & 117 & 1097 & 137 & 932 & 138 & 930 \\ 
+        2021 & 85 & 2486 & 121 & 1743 & 176 & 1199 & 210 & 1004 & 210 & 1006 \\ 
+        2022 & 65 & 2161 & 89 & 1592 & 138 & 1024 & 173 & 813 & 178 & 794 \\ 
+        2023 & 85 & 2642 & 119 & 1878 & 182 & 1234 & 234 & 957 & 239 & 938 \\ \hline
+%        TPR & \cellcolor{red!25}44.1\% &\cellcolor{green!25} 55.9\% & 44.2\% & 55.8\% & 45.0\% & 55.0\% & 44.4\% & 55.6\% & 45.7\% & 54.3\% \\ 
+%        TNR & \cellcolor{green!25}54.7\% & \cellcolor{red!25}45.3\% & 54.2\% & 45.8\% & 53.5\% & 46.5\% & 50.3\% & 49.7\% & 50.3\% & 49.7\% \\ \hline
+    \end{tabular}
+    \label{tab_comparison_wl}
+\end{table}
+
+\begin{table}[!ht]
+    \centering
+    \caption{Comparison of Annual Returns  for Different $k$ }
+    \medskip
+    \begin{tabular}{l | rr| rr| rr| rr| rr}
+    \hline
+\multirow{2}{*}{Year} & \multicolumn{2}{c|}{$k=1$ day}   
+& \multicolumn{2}{c|}{$k=3$ day}  & \multicolumn{2}{c|}{$k=5$ days}   
+& \multicolumn{2}{c|}{$k=7$ days}   & \multicolumn{2}{c}{$k=9$ days}\\
+ & 1-WS & 1-LS & 3-WS & 3-LS & 5-WS & 5-LS & 7-WS & 7-LS & 9-WS & 9-LS \\
+\hline
+                2001 & \cellcolor{red!25}-40.2 & \cellcolor{green!25}17.0 & -20.2 & -12.4 & -23.7 & -8.3 & -17.0 & -15.8 & -26.0 & -5.4 \\
+2002 & \cellcolor{red!25}-58.5 & \cellcolor{green!25}34.2 & -54.7 & 22.8 & -48.3 & 7.6 & -52.4 & 17.0 & -42.1 & -3.8 \\
+2003 & \cellcolor{red!25}6.1 & \cellcolor{green!25}51.4 & 18.8 & 35.3 & 15.7 & 39.0 & 19.7 & 34.2 & 21.9 & 31.9 \\
+2004 & \cellcolor{red!25}0.7 & \cellcolor{green!25}18.4 & 4.2 & 14.4 & 8.1 & 10.2 & 7.4 & 11.0 & 5.5 & 12.9 \\
+2005 & \cellcolor{red!25}-1.2 & \cellcolor{green!25}9.6 & 4.0 & 4.1 & 3.6 & 4.6 & 6.4 & 1.8 & 3.3 & 4.8 \\
+2006 & 11.4 & 19.0 & \cellcolor{red!25}7.9 & \cellcolor{green!25}22.8 & 15.8 & 14.4 & 14.1 & 16.2 & 15.2 & 15.1 \\
+2007 & -0.2 & 12.5 & 0.5 & 11.7 & 1.3 & 10.9 & \cellcolor{red!25}-1.8 & \cellcolor{green!25}14.3 & -1.2 & 13.6 \\
+2008 & -45.7 & -26.5 & -48.8 & -22.1 & \cellcolor{red!25}-49.4 & \cellcolor{green!25}-21.2 & -45.9 & -26.3 & -48.1 & -23.1 \\
+2009 & \cellcolor{red!25}19.3 & \cellcolor{green!25}34.4 & 22.6 & 30.9 & 20.9 & 32.6 & 21.6 & 31.9 & 26.9 & 26.4 \\
+2010 & 9.4 & 22.7 & \cellcolor{red!25}8.7 & \cellcolor{green!25}23.5 & 9.4 & 22.7 & 16.7 & 15.0 & 14.3 & 17.5 \\
+2011 & -4.9 & 9.2 & \cellcolor{red!25}-5.0 & \cellcolor{green!25}9.3 & -3.4 & 7.6 & 0.3 & 3.5 & -2.7 & 6.7 \\
+2012 & \cellcolor{red!25}-1.8 & \cellcolor{green!25}36.3 & 4.8 & 27.7 & 5.3 & 27.1 & 9.7 & 22.0 & 11.0 & 20.6 \\
+2013 & \cellcolor{red!25}24.6 & \cellcolor{green!25}40.3 & 26.3 & 38.3 & 28.2 & 36.2 & 29.6 & 34.9 & 27.9 & 36.6 \\
+2014 & 10.2 & 16.9 & \cellcolor{red!25}8.6 & \cellcolor{green!25}18.6 & 14.5 & 12.5 & 12.2 & 14.8 & 13.3 & 13.6 \\
+2015 & \cellcolor{red!25}-2.7 & \cellcolor{green!25}4.6 & -0.3 & 2.1 & -0.9 & 2.7 & -2.3 & 4.2 & -2.3 & 4.1 \\
+2016 & 12.6 & 11.1 & 10.8 & 12.9 & 11.6 & 12.1 & \cellcolor{green!25}16.0 & \cellcolor{red!25}7.8 & 14.9 & 8.8 \\
+2017 & 21.1 & 21.2 & 21.5 & 20.8 & \cellcolor{green!25}22.2 & \cellcolor{red!25}20.2 & 21.1 & 21.3 & 20.4 & 21.9 \\
+2018 & -2.5 & -6.7 & 0.4 & -9.5 & -2.8 & -6.5 & -2.3 & -7.0 & \cellcolor{red!25}-10.8 & \cellcolor{green!25}1.9 \\
+2019 & \cellcolor{green!25}37.1 & \cellcolor{red!25}25.7 & 35.8 & 26.9 & 36.1 & 26.6 & 28.2 & 34.5 & 31.9 & 30.6 \\
+2020 & 27.7 & 6.0 & \cellcolor{red!25}3.8 & \cellcolor{green!25}30.4 & 8.8 & 24.4 & 7.3 & 26.2 & 13.3 & 19.4 \\
+2021 & 41.7 & 16.3 & 35.3 & 21.9 & 50.8 & 9.3 & \cellcolor{green!25}53.0 & \cellcolor{red!25}7.7 & 52.3 & 8.3 \\
+2022 & -23.1 & -13.1 & \cellcolor{red!25}-26.8 & \cellcolor{green!25}-8.7 & -21.7 & -14.6 & -17.4 & -19.0 & -15.2 & -21.1 \\
+2023 & 30.0 & 22.2 & 34.7 & 18.0 & 31.9 & 20.5 & \cellcolor{green!25}35.0 & \cellcolor{red!25}17.7 & 34.5 & 18.2 \\ \hline
+$\max$ & 41.7 & 51.4 & 35.8 & 38.3 & 50.8 & 39.0 & \cellcolor{green!25}53.0 & \cellcolor{red!25}34.9 & 52.3 & 36.6 \\
+$\min$ & \cellcolor{red!25}-58.5 & -26.5 & -54.7 & -22.1 & -49.4 & \cellcolor{green!25}-21.2 & -52.4 & -26.3 & -48.1 & -23.1 \\
+$M$ & 6.1 & 17.0 & \cellcolor{red!25}4.8 & \cellcolor{green!25}18.6 & 8.8 & 12.1 & 9.7 & 14.8 & 13.3 & 13.6 \\
+$\mu$  & \cellcolor{red!25}3.1 & \cellcolor{green!25}16.6 & 4.0 & 14.8 & 5.8 & 12.6 & 6.9 & 11.6 & 6.9 & 11.3 \\
+$\sigma$ & \cellcolor{green!25}25.4 & 17.4 & 23.6 & 16.0 & 24.1 & 15.6 & 23.8 & 16.8 & 23.9 & \cellcolor{red!25}15.1 \\       
+IRR & -192.1 & 15.1 & -6.9 & 13.3 & -0.9 & 11.1 & 1.3 & 9.8 & 1.4 & 9.7 \\ \hline
+    \end{tabular}
+    \label{tab_comparison_wl}
+\end{table}
+
+Table~\ref{tab_comparison_wl} compares winner and loser strategies, defined briefly: "1D WS" and "1D LS" are based on the previous day's returns, "5D WS" and "5D LS" on the past five days, and "3D WS" and "3D LS" on three days
+
+\begin{table}[!ht]
+    \centering
+    \caption{Annual Maximum Drawdowns of Winner And Loser Strategies}
+    \medskip
+    \begin{tabular}{l | rr | rr | rr | rr| rr}
+    \hline
+\multirow{2}{*}{Year} & \multicolumn{2}{c|}{$k=1$ day}   
+& \multicolumn{2}{c|}{$k=3$ day}  & \multicolumn{2}{c|}{$k=5$ days}   
+& \multicolumn{2}{c|}{$k=7$ day}   & \multicolumn{2}{c}{$k=9$ days}\\
+ & 1-WS & 1-LS & 3-WS & 3-LS & 5-WS & 5-LS & 7-WS & 7-LS & 9-WS & 9-LS \\
+ \hline
+2001 & \cellcolor{red!25}-53.7 & -32.0 & -35.5 & -36.9 & -33.6 & -39.8 & \cellcolor{green!25}-28.3 & -41.8 & -36.7 & -33.4 \\
+2002 & \cellcolor{red!25}-58.9 & -26.4 & -55.3 & -17.9 & -50.9 & -25.8 & -55.2 & \cellcolor{green!25}-16.4 & -48.1 & -27.8 \\
+2003 & \cellcolor{red!25}-19.1 & -13.9 & -14.6 & -13.5 & -16.0 & -12.3 & -16.0 & -12.2 & -17.1 & \cellcolor{green!25}-11.1 \\
+2004 & \cellcolor{red!25}-13.7 & \cellcolor{green!25}-6.5 & -10.5 & -7.9 & -9.3 & -8.9 & -8.3 & -9.4 & -9.7 & -9.8 \\
+2005 & -8.0 & \cellcolor{green!25}-5.6 & -8.4 & -6.4 & \cellcolor{red!25}-9.1 & -6.2 & -8.0 & -6.9 & -8.8 & -6.5 \\
+2006 & -8.0 & -7.7 & \cellcolor{red!25}-8.9 & \cellcolor{green!25}-6.9 & -7.5 & -8.8 & -8.4 & -7.9 & -8.6 & -7.7 \\
+2007 & -11.1 & -10.1 & \cellcolor{red!25}-12.6 & \cellcolor{green!25}-8.9 & -10.8 & -10.3 & -12.0 & -9.2 & -10.8 & -9.1 \\
+2008 & -53.6 & -41.8 & -56.8 & -39.6 & \cellcolor{red!25}-58.6 & \cellcolor{green!25}-34.1 & -55.3 & -38.9 & -56.6 & -37.7 \\
+2009 & -25.4 & -28.4 & -25.5 & -28.2 & -26.4 & -27.4 & -26.6 & -27.1 & \cellcolor{green!25}-24.7 & \cellcolor{red!25}-29.1 \\
+2010 & -16.5 & -14.3 & -16.9 & -13.9 & -16.4 & -14.4 & -14.9 & -15.9 & \cellcolor{red!25}-17.0 & \cellcolor{green!25}-13.8 \\
+2011 & \cellcolor{red!25}-22.7 & \cellcolor{green!25}-16.8 & -22.1 & -17.9 & -19.2 & -19.2 & -18.9 & -19.1 & -18.7 & -18.9 \\
+2012 & \cellcolor{red!25}-14.7 & \cellcolor{green!25}-6.3 & -12.8 & -7.0 & -12.7 & -7.2 & -11.9 & -8.0 & -11.6 & -8.3 \\
+2013 & \cellcolor{red!25}-7.1 & \cellcolor{green!25}-4.3 & -6.9 & -4.9 & -6.5 & -4.7 & -5.9 & -5.1 & -5.2 & -5.8 \\
+2014 & -8.2 & -7.4 & -8.2 & -6.9 & \cellcolor{red!25}-8.4 & \cellcolor{green!25}-6.4 & -6.8 & -8.0 & -7.7 & -7.1 \\
+2015 & -12.5 & \cellcolor{red!25}-13.2 & -13.1 & -12.6 & -12.7 & \cellcolor{green!25}-11.9 & -12.8 & -12.6 & -12.9 & -13.0 \\
+2016 & \cellcolor{green!25}-7.3 & \cellcolor{red!25}-10.8 & -9.5 & -8.5 & -10.1 & -8.1 & -8.5 & -9.5 & -9.2 & -8.9 \\
+2017 & -3.7 & -3.3 & -2.6 & -3.3 & \cellcolor{green!25}-2.3 & -4.1 & -3.0 & -3.9 & -4.0 & \cellcolor{red!25}-4.2 \\
+2018 & -19.5 & -19.5 & -18.3 & -21.1 & -18.1 & -20.6 & -18.5 & -20.0 & \cellcolor{red!25}-22.9 & \cellcolor{green!25}-15.5 \\
+2019 & -7.3 & -7.3 & -6.1 & -8.0 & -6.4 & -7.7 & \cellcolor{red!25}-8.4 & \cellcolor{green!25}-6.1 & -7.0 & -7.1 \\
+2020 & -32.3 & -36.0 & -33.9 & -34.4 & -32.9 & -35.4 & -32.5 & -35.8 & \cellcolor{green!25}-31.3 & \cellcolor{red!25}-36.8 \\
+2021 & -5.7 & -7.9 & -5.7 & -7.1 & \cellcolor{green!25}-4.6 & -8.7 & -6.1 & \cellcolor{red!25}-10.1 & -6.6 & -8.9 \\
+2022 & -31.2 & -19.5 & \cellcolor{red!25}-32.4 & -20.3 & -27.9 & -25.3 & -23.8 & -28.1 & \cellcolor{green!25}-19.1 & -30.5 \\
+2023 & -10.6 & -9.8 & \cellcolor{green!25}-7.7 & \cellcolor{red!25}-12.2 & -8.5 & -11.9 & -8.3 & -11.8 & -9.0 & -11.1 \\\hline
+
+$\max$ & -3.7 & -3.3 & -2.6 & -3.3 & \cellcolor{green!25}-2.3 & -4.1 & -3.0 & -3.9 & -4.0 & \cellcolor{red!25}-4.2 \\
+$\min$ & \cellcolor{red!25}-58.9 & -41.8 & -56.8 & -39.6 & -58.6 & -39.8 & -55.3 & -41.8 & -56.6 & \cellcolor{green!25}-37.7 \\
+$M$ & \cellcolor{red!25}-13.7 & \cellcolor{green!25}-10.8 & -12.8 & -12.2 & -12.7 & -11.9 & -12.0 & -11.8 & -11.6 & -11.1 \\
+$\mu$  & \cellcolor{red!25}-19.6 & -15.2 & -18.5 & \cellcolor{green!25}-15.0 & -17.8 & -15.6 & -17.3 & -15.8 & -17.5 & -15.7 \\
+$\sigma$ & \cellcolor{green!25}16.2 & 10.8 & 15.0 & \cellcolor{red!25}10.6 & 14.6 & 10.7 & 14.3 & 11.1 & 13.9 & 10.9 \\
+
+\hline
+    \end{tabular}
+\end{table}
+\begin{table}[!ht]
+    \centering
+    \caption{Annual Volatility of of Investment Strategies}
+    \medskip
+    \begin{tabular}{l | rrr | rr | rr}
+    \hline
+\multirow{2}{*}{Year} & \multicolumn{3}{c|}{Buy-and-Hold}   
+& \multicolumn{2}{c|}{$k=1$ day}  & \multicolumn{2}{c}{$k=3$ days}   \\
+ & S\&P & Growth & Value & 1-WS & 1-LS & 3-WS & 3-LS \\ 
+     \hline
+2001 & 21.9 & \cellcolor{green!25}40.7 & \cellcolor{red!25}17.2 & 28.8 & 33.4 & 25.7 & 35.9 \\
+2002 & 26.4 & \cellcolor{green!25}33.1 & \cellcolor{red!25}24.5 & 28.7 & 29.2 & 27.8 & 30.1 \\
+2003 & \cellcolor{red!25}16.5 & \cellcolor{green!25}18.2 & 16.5 & 17.5 & 17.2 & 17.6 & 17.1 \\
+2004 & 11.1 & 11.1 & 10.5 & \cellcolor{red!25}10.4 & \cellcolor{green!25}11.2 & 10.6 & 11.1 \\
+2005 & \cellcolor{green!25}10.3 & 10.2 & 9.8 & 9.9 & 10.1 & \cellcolor{red!25}9.7 & 10.3 \\
+2006 & 10.0 & \cellcolor{green!25}10.7 & \cellcolor{red!25}9.8 & 9.9 & 10.6 & 9.9 & 10.7 \\
+2007 & 15.9 & \cellcolor{red!25}14.6 & \cellcolor{green!25}16.7 & 15.4 & 15.9 & 15.7 & 15.6 \\
+2008 & \cellcolor{green!25}41.4 & \cellcolor{red!25}37.4 & 40.9 & 38.4 & 39.9 & 38.4 & 39.9 \\
+2009 & 26.6 & \cellcolor{red!25}25.5 & \cellcolor{green!25}27.8 & 26.4 & 26.9 & 26.8 & 26.5 \\
+2010 & 17.9 & \cellcolor{green!25}18.8 & \cellcolor{red!25}17.8 & 18.6 & 18.1 & 18.5 & 18.2 \\
+2011 & 23.0 & \cellcolor{red!25}21.5 & \cellcolor{green!25}23.7 & 23.1 & 22.2 & 22.9 & 22.4 \\
+2012 & 12.7 & \cellcolor{red!25}12.0 & \cellcolor{green!25}13.9 & 12.8 & 13.1 & 12.9 & 13.1 \\
+2013 & \cellcolor{green!25}11.1 & 10.9 & \cellcolor{red!25}10.4 & 10.6 & 10.8 & 10.8 & 10.5 \\
+2014 & 11.2 & \cellcolor{green!25}12.2 & \cellcolor{red!25}10.3 & 11.3 & 11.3 & 11.6 & 11.0 \\
+2015 & 15.4 & 15.8 & 15.3 & 15.5 & 15.7 & \cellcolor{red!25}15.3 & \cellcolor{green!25}15.9 \\
+2016 & 13.1 & 13.4 & 13.3 & \cellcolor{red!25}12.8 & \cellcolor{green!25}13.8 & 13.2 & 13.4 \\
+2017 & \cellcolor{red!25}6.7 & 7.2 & 7.2 & 7.2 & 7.2 & 6.9 & \cellcolor{green!25}7.5 \\
+2018 & 17.0 & \cellcolor{green!25}19.5 & \cellcolor{red!25}15.1 & 17.8 & 17.1 & 17.4 & 17.4 \\
+2019 & \cellcolor{red!25}12.5 & 12.9 & 12.8 & 12.7 & 13.0 & 12.5 & \cellcolor{green!25}13.2 \\
+2020 & \cellcolor{red!25}33.5 & 34.7 & 35.2 & 34.6 & 35.3 & 34.4 & \cellcolor{green!25}35.5 \\
+2021 & 13.0 & \cellcolor{green!25}16.3 & \cellcolor{red!25}13.0 & 14.1 & 15.3 & 13.9 & 15.5 \\
+2022 & 24.2 & \cellcolor{green!25}30.6 & \cellcolor{red!25}19.2 & 24.9 & 26.3 & 24.4 & 26.7 \\
+2023 & 13.0 & 13.3 & 13.3 & 13.1 & 13.5 & \cellcolor{red!25}12.7 & \cellcolor{green!25}13.9 \\
+$\max$ & 21.9 & \cellcolor{red!25}10.9 & \cellcolor{green!25}40.9 & 38.4 & 39.9 & 38.4 & 39.9 \\
+$\min$ & \cellcolor{red!25}6.7 & 7.2 & 7.2 & 7.2 & 7.2 & 6.9 & \cellcolor{green!25}7.5 \\
+$M$ & 10.0 & \cellcolor{red!25}9.0 & 9.8 & 15.4 & \cellcolor{green!25}15.7 & 15.3 & 15.6 \\
+$\mu$  & 12.9 & \cellcolor{red!25}9.0 & 17.4 & 18.0 & 18.6 & 17.8 & \cellcolor{green!25}18.8 \\
+$\sigma$ & 8.0 & \cellcolor{red!25}2.6 & \cellcolor{green!25}13.9 & 8.5 & 9.0 & 8.3 & 9.3 \\
+\hline
+    \end{tabular}
+    \label{tab_comparison_av}
+\end{table}
+
+\begin{table}[!ht]
+    \centering
+    \caption{Annual Volatility of Winner And Loser Strategies}
+    \medskip
+\begin{tabular}{l| rr | rr| rr| rr| rr}
+\hline
+\multirow{2}{*}{Year} & \multicolumn{2}{c|}{1 day}   
+& \multicolumn{2}{c|}{3 day}  & \multicolumn{2}{c|}{5 days}   
+& \multicolumn{2}{c|}{7 day}   & \multicolumn{2}{c}{9 days}\\
+ & 1-WS & 1-LS & 3-WS & 3-LS & 5-WS & 5-LS & 7-WS & 7-LS & 9-WS & 9-LS \\
+\hline
+2001 & 28.8 & 33.4 & 25.7 & 35.9 & 25.3 & 36.2 & \cellcolor{red!25}24.0 & \cellcolor{green!25}37.1 & 26.0 & 35.6 \\
+2002 & 28.7 & 29.2 & 27.8 & 30.1 & 27.4 & 30.6 & 27.3 & 30.6 & \cellcolor{red!25}27.3 & \cellcolor{green!25}30.8 \\
+2003 & 17.5 & 17.2 & 17.6 & 17.1 & 17.7 & 17.1 & 17.9 & 16.8 & \cellcolor{green!25}18.2 & \cellcolor{red!25}16.6 \\
+2004 & \cellcolor{red!25}10.4 & \cellcolor{green!25}11.2 & 10.6 & 11.1 & 10.9 & 10.8 & 10.9 & 10.8 & 10.7 & 10.9 \\
+2005 & 9.9 & 10.1 & \cellcolor{red!25}9.7 & \cellcolor{green!25}10.3 & 10.0 & 10.0 & 10.0 & 10.0 & 10.1 & 9.9 \\
+2006 & 9.9 & 10.6 & 9.9 & 10.7 & \cellcolor{red!25}9.8 & \cellcolor{green!25}10.7 & 9.9 & 10.6 & 10.1 & 10.5 \\
+2007 & \cellcolor{red!25}15.4 & \cellcolor{green!25}15.9 & 15.7 & 15.6 & 15.6 & 15.7 & 15.4 & 15.8 & 15.7 & 15.6 \\
+2008 & 38.4 & 39.9 & \cellcolor{red!25}38.4 & \cellcolor{green!25}39.9 & 39.9 & 38.4 & 39.5 & 38.8 & 39.4 & 38.9 \\
+2009 & 26.4 & 26.9 & 26.8 & 26.5 & \cellcolor{red!25}26.2 & \cellcolor{green!25}27.1 & 26.3 & 27.0 & 26.4 & 27.0 \\
+2010 & \cellcolor{green!25}18.6 & \cellcolor{red!25}18.1 & 18.5 & 18.2 & 18.3 & 18.4 & 18.1 & 18.5 & 18.2 & 18.4 \\
+2011 & \cellcolor{green!25}23.1 & \cellcolor{red!25}22.2 & 22.9 & 22.4 & 22.8 & 22.5 & 22.8 & 22.5 & 22.8 & 22.5 \\
+2012 & 12.8 & 13.1 & 12.9 & 13.1 & \cellcolor{red!25}12.8 & \cellcolor{green!25}13.2 & 13.0 & 13.0 & 12.9 & 13.1 \\
+2013 & 10.6 & 10.8 & \cellcolor{green!25}10.8 & \cellcolor{red!25}10.5 & 10.7 & 10.7 & 10.7 & 10.7 & 10.5 & 10.8 \\
+2014 & 11.3 & 11.3 & \cellcolor{green!25}11.6 & \cellcolor{red!25}11.0 & 11.2 & 11.4 & 11.3 & 11.3 & 11.4 & 11.2 \\
+2015 & 15.5 & 15.7 & 15.3 & 15.9 & \cellcolor{red!25}15.1 & \cellcolor{green!25}16.1 & 15.3 & 15.9 & 15.3 & 15.9 \\
+2016 & \cellcolor{red!25}12.8 & \cellcolor{green!25}13.8 & 13.2 & 13.4 & 13.4 & 13.3 & 13.5 & 13.2 & 13.3 & 13.3 \\
+2017 & 7.2 & 7.2 & \cellcolor{red!25}6.9 & \cellcolor{green!25}7.5 & 7.1 & 7.3 & 7.2 & 7.2 & 7.2 & 7.3 \\
+2018 & 17.8 & 17.1 & 17.4 & 17.4 & 17.4 & 17.5 & \cellcolor{red!25}17.0 & \cellcolor{green!25}17.8 & 17.6 & 17.2 \\
+2019 & 12.7 & 13.0 & 12.5 & 13.2 & \cellcolor{red!25}12.5 & \cellcolor{green!25}13.2 & 12.8 & 12.9 & 12.6 & 13.1 \\
+2020 & 34.6 & 35.3 & 34.4 & 35.5 & 34.3 & 35.6 & \cellcolor{red!25}34.3 & \cellcolor{green!25}35.6 & 34.4 & 35.5 \\
+2021 & 14.1 & 15.3 & 13.9 & 15.5 & 13.7 & 15.6 & 14.0 & 15.4 & \cellcolor{red!25}13.5 & \cellcolor{green!25}15.7 \\
+2022 & 24.9 & 26.3 & 24.4 & 26.7 & 23.8 & 27.2 & \cellcolor{red!25}23.0 & \cellcolor{green!25}28.0 & 23.7 & 27.4 \\
+2023 & 13.1 & 13.5 & \cellcolor{red!25}12.7 & \cellcolor{green!25}13.9 & 13.1 & 13.5 & 13.2 & 13.4 & 13.3 & 13.3 \\ \hline
+$\max$ & 38.4 & 39.9 & \cellcolor{red!25}38.4 & \cellcolor{green!25}39.9 & 39.9 & 38.4 & 39.5 & 38.8 & 39.4 & 38.9 \\
+$\min$ & 7.2 & 7.2 & \cellcolor{red!25}6.9 & \cellcolor{green!25}7.5 & 7.1 & 7.3 & 7.2 & 7.2 & 7.2 & 7.3 \\
+$M$ & 15.4 & 15.7 & 15.3 & 15.6 & \cellcolor{red!25}15.1 & 15.7 & 15.3 & \cellcolor{green!25}15.8 & 15.3 & 15.7 \\
+$\mu$  & 18.0 & 18.6 & 17.8 & 18.8 & 17.8 & 18.8 & \cellcolor{red!25}17.7 & \cellcolor{green!25}18.8 & 17.8 & 18.7 \\
+$\sigma$ & 8.5 & 9.0 & 8.3 & 9.3 & 8.4 & 9.2 & \cellcolor{red!25}8.2 & \cellcolor{green!25}9.4 & 8.3 & 9.3 \\
+
+
+\hline
+\end{tabular}
+\end{table}
+\begin{table}[!ht]
+    \centering
+    \caption{Annual Trading Number of Winner And Loser Strategies}
+\begin{tabular}{lrrrrrrrr}
+\hline
+Year & S\&P & Growth & Value & 1 day & 3 day & 5 day & 7 day & 9 day \\
+\hline
+        2001 & 0 & 0 & 0 & 136 & 64 & 49 & 45 & 35 \\ 
+        2002 & 0 & 0 & 0 & 160 & 90 & 70 & 54 & 44 \\ 
+        2003 & 0 & 0 & 0 & 145 & 68 & 50 & 50 & 46 \\ 
+        2004 & 0 & 0 & 0 & 140 & 75 & 49 & 37 & 37 \\ 
+        2005 & 0 & 0 & 0 & 132 & 63 & 45 & 31 & 34 \\ 
+        2006 & 0 & 0 & 0 & 132 & 74 & 44 & 42 & 42 \\ 
+        2007 & 0 & 0 & 0 & 142 & 73 & 57 & 49 & 48 \\ 
+        2008 & 0 & 0 & 0 & 133 & 83 & 67 & 51 & 46 \\ 
+        2009 & 0 & 0 & 0 & 133 & 71 & 53 & 39 & 31 \\ 
+        2010 & 0 & 0 & 0 & 135 & 72 & 54 & 37 & 35 \\ 
+        2011 & 0 & 0 & 0 & 138 & 77 & 55 & 46 & 44 \\ 
+        2012 & 0 & 0 & 0 & 150 & 83 & 67 & 53 & 43 \\ 
+        2013 & 0 & 0 & 0 & 139 & 71 & 56 & 42 & 38 \\ 
+        2014 & 0 & 0 & 0 & 131 & 69 & 41 & 35 & 31 \\ 
+        2015 & 0 & 0 & 0 & 132 & 62 & 46 & 52 & 44 \\ 
+        2016 & 0 & 0 & 0 & 125 & 64 & 48 & 33 & 31 \\ 
+        2017 & 0 & 0 & 0 & 132 & 66 & 43 & 32 & 32 \\ 
+        2018 & 0 & 0 & 0 & 118 & 57 & 41 & 30 & 36 \\ 
+        2019 & 0 & 0 & 0 & 117 & 55 & 38 & 40 & 36 \\ 
+        2020 & 0 & 0 & 0 & 114 & 61 & 47 & 40 & 32 \\ 
+        2021 & 0 & 0 & 0 & 118 & 62 & 41 & 24 & 30 \\ 
+        2022 & 0 & 0 & 0 & 126 & 72 & 44 & 34 & 26 \\ 
+        2023 & 0 & 0 & 0 & 123 & 58 & 56 & 42 & 36 \\ 
+        $\max$ & 0 & 0 & 0 & 160 & 90 & 70 & 54 & 48 \\ 
+        $\min$ & 0 & 0 & 0 & 114 & 55 & 38 & 24 & 26 \\ 
+        $M$ & 0 & 0 & 0 & 132 & 69 & 49 & 40 & 36 \\ 
+        $\mu$  & 0 & 0 & 0 & 133 & 69 & 50 & 41 & 37 \\ 
+        $\sigma$ & 0 & 0 & 0 & 11 & 9 & 9 & 8 & 6 \\ 
+
+\hline
+\end{tabular}
+\end{table}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{plots/Yearly Performance Comparison Winner vs Loser Strategies.png}
+  \caption{Yearly Performance Comparison Winner vs Loser Strategies}
+  \label{fig:winer_loser_fridays}
+\end{figure}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{plots/Max Drawdown Winner Loser.png}
+  \caption{Yearly Max Drawdown: Winner vs Loser Strategies}
+  \label{fig:winer_loser_fridays}
+\end{figure}
+Graphic ~\ref{fig:winer_loser_fridays} shows the value of winer and loser strategies.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{plots/Performance Comparison of Investment Strategies from a \$100.png}
+  \caption{Performance Comparison of Investment Strategies from a \$100}
+  \label{fig:winer_loser_fridays}
+\end{figure}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{plots/Annual Correlation.png}
+  \caption{Annual Correlation}
+  \label{fig:winer_loser_fridays}
+\end{figure}
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{plots/Strategy Performance Comparison (EW).png}
+  \caption{Strategy Performance Comparison (EW)}
+  \label{fig:winer_loser_fridays}
+\end{figure}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}
